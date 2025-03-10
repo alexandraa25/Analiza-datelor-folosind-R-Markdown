@@ -1,0 +1,1100 @@
+---
+title: "Influenta satisfactiei la locul de munca"
+author: "Ianculescu Alexandra Mihaela"
+date: "2025-02-20"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("C:/Users/iancu/OneDrive/Desktop/adm")
+```
+
+```{r include=FALSE}
+pacheteBDSA <- c("knitr", "rmarkdown", "RColorBrewer", "scales", 
+                 "tidyverse","dplyr", "plyr", "ggplot2", "gganimate", 
+                 "Rmisc", "Hmisc","randomForest", "rattle", "rpart.plot", "caret", 
+                 "gmodels", "PresenceAbsence", "broom", "rlang","cutpointr","pROC",
+                 "ROCR", "ca", "plotROC", "ROSE", 
+                 "devtools","rpart", "readxl", "ellipsis","gridExtra")
+
+# instalare pachete (dupa instalare, comanda de mai jos se comenteaza cu #)
+ #install.packages(pacheteBDSA, dependencies = T)
+
+#incarcare pachete (se ruleaza de fiecare data)
+sapply(pacheteBDSA, library, character.only =T)
+
+```
+
+#Introducere
+```{r}
+#Aceasta analiza exploreaza factorii care influenteaza satisfactia la locul de munca in randul profesionistilor din domeniul IT. Utilizand un set de date extins (raspunsurile date de catre developeri, in anul 2024, la chestionarul de pe Stack Overflow la nivel mondial), analiza se concentreaza pe mai multe variabile relevante, inclusiv experienta profesionala, influenta in deciziile de achizitie, tipul de munca, satisfactia fata de resursele disponibile, nivelul de salarizare si perceptia asupra amenintarii reprezentate de inteligenta artificiala.
+```
+
+#IMPORT BAZA DE DATE 
+
+```{r}
+data2024<-read.csv("survey_results_public.csv")
+dim(data2024)
+ 
+```
+```{r}
+var_desc<-read_csv("survey_results_schema.csv")
+dim(var_desc)
+```
+```{r include=FALSE}
+glimpse(data2024) 
+```
+
+
+#Filtrare baza de date 
+```{r}
+#Se realizează filtrarea datelor din setul de date data2024 pe baza coloanei Employment, care descrie starea de ocupare a respondentilor. Scopul este de a retine doar inregistrarile care corespund unor persoane angajate (full-time, part-time sau independente) și de a elimina persoanele care nu sunt angajate. 
+#Datele din coloana Employment sunt formate din combinații de stări de ocupare, separate prin punct si virgula. Acest lucru indica faptul ca unele persoane au mai multe roluri sau surse de venit simultan (de exemplu, cineva poate fi angajat cu normă întreagă si, în acelasi timp, freelancer). 
+
+var_desc$question[var_desc$qname == "Employment"]
+#table(data2024$Employment)
+library(dplyr)
+library(stringr)
+
+#filtrarea respondentiilor care sunt au selectat cel putin una din varinatele care reprezinta faptul ca sunt angajati
+data2024<-data2024%>%
+  filter(
+    str_detect(Employment, "Employed, full-time", negate = FALSE) |
+    str_detect(Employment, "Employed, part-time", negate = FALSE) |
+    str_detect(Employment, "Independent contractor, freelancer, or self-employed", negate = FALSE) )
+
+#filtrarea persoanelor care au ales unul dintre raspunsurile care reprezinta faptul ca nu sunt angajati  
+data2024<-data2024%>%
+  filter(
+    str_detect(Employment, "Not employed, but looking for work", negate = TRUE) &
+    str_detect(Employment, "Not employed, and not looking for work", negate = TRUE) )
+
+dim(data2024)
+table(data2024$Employment)
+```
+
+#Prelucrare variabile
+
+##MainBranch
+```{r prelucrare MainBranch }
+#Aceasta variabila influenteaza satisfactia la job deoarece persoanele care sunt Devloperi profesionisti pot avea un sentiment mai mare de realizare si recunoastere in cariera lor, in timp ce cei care sunt Non-Developeri sau in proces de invatare pot simti mai mult stres sau incertitudine in legatura cu abilitatile lor, ceea ce poate afecta nivelul lor de satisfactie profesionala.
+
+var_desc$question[var_desc$qname == "MainBranch"]
+table(data2024$MainBranch)
+
+#transformarea valorile din coloana MainBranch într-o variabila factor cu categorii mai concise si mai ușor de interpretat
+ data2024 <- data2024 %>%
+  mutate(MainBranch_ = as.factor(case_when(
+    MainBranch == "I am a developer by profession" ~ "Developer", #persoane care lucrează ca programatori sau dezvoltatori software in mod profesionist
+    MainBranch == "I am learning to code" ~ "Learning", # persoane care sunt in procesul de învățare a programarii
+    MainBranch == "I am not primarily a developer, but I write code sometimes as part of my work/studies" ~ "Non-Developer", # persoane care nu sunt programatori profesionisti, dar folosesc programarea ca o unealta in munca sau studiile lor 
+    MainBranch == "I code primarily as a hobby" ~ "Hobby Coder", #persoane care scriu cod în mod recreativ, ca un hobby sau pasiune personala
+    MainBranch == "I used to be a developer by profession, but no longer am" ~ "Ex-Developer" #persoane care au fost programatori profesioniști în trecut, dar acum nu mai practică această meserie
+  )))
+
+summary(data2024$MainBranch_)
+#Interpreatrea rezultate:
+#Rezultatele arata ca majoritatea respondentilor sunt Devloperi, ceea ce sugereaza ca majoritatea celor chestionati sunt programatori profesionisti. In schimb, un numar mai mic de persoane sunt Non-Developeri, adica folosesc programarea ca un instrument in munca sau studii, fara a fi profesionisti in domeniu. Putine persoane sunt Ex-Developeri, indicand ca putini au renuntat la meseria de dezvoltator. De asemenea, exista un numar semnificativ de Hobby Coderi care programeaza din placere fara a avea un job in acest domeniu, si un numar mai mic de persoane care sunt in proces de invatare a programarii.
+```
+
+##YearsCodePro
+```{r prelucrare YearsCodePro}
+#Experienta profesionala influenteaza satisfactia la job, deoarece angajatii cu mai multi ani de experienta pot simti o mai mare incredere in abilitatile lor, pot obtine roluri mai avansate si pot avea o mai buna intelegere a asteptarilor organizationale, ceea ce le creste satisfactia profesionala.
+
+table(data2024$YearsCodePro)
+
+#transformarea intr-o variabila numerica
+data2024 <- data2024 %>%
+    mutate(YearsCodePro1 = as.numeric(case_when(YearsCodePro == "Less than 1 year"  ~ "0.5",
+                                                YearsCodePro == "More than 50 years"  ~ "51",
+                                                is.na(YearsCodePro) == TRUE ~ "0",
+                                                TRUE ~ YearsCodePro)))
+
+dim(data2024)
+table(data2024$YearsCodePro1)
+summary(data2024$YearsCodePro1)
+
+# Pe baza variabilei numerice urmeaza reprezentarea grafica a variabilei sub forma de Histograma 
+data2024 %>%
+  filter(!is.na(YearsCodePro1)) %>% 
+  ggplot() +
+  geom_histogram(aes(x = YearsCodePro1), color = "black", fill = "#ecb1fe", na.rm = TRUE, binwidth = 1) +
+  labs(x = "Ani de experiență",
+       y = "Frecvență",
+       caption = "BDSA") +
+  ggtitle("Distribuția anilor de experiență") + 
+  theme_gray(base_size = 12)
+
+#Interpretare grafic:
+#Histograma ofera o vedere detaliata a distributiei anilor de experienta. Majoritatea respondentilor au putina experienta (0-5 ani). Numarul de persoane scade pe masura ce experienta creste, cu putini respondenti avand peste 10-15 ani de experienta. Foarte putini au experienta avansata (peste 20-30 de ani). 
+
+# Gruparea în categorii pe baza analizei din hisograma
+data2024 <- data2024 %>% 
+  mutate(YearsCodePro_ = as.factor(case_when(
+    YearsCodePro1 <= 5  ~ "0-5",   
+    YearsCodePro1 <= 10 ~ "6-10",   
+    YearsCodePro1 <= 15 ~ "11-15",  
+    YearsCodePro1 <= 20 ~ "16-20",   
+    YearsCodePro1 <= 30 ~ "20-30",   
+    YearsCodePro1 > 30 ~ "30+"       
+  )))
+
+
+summary(data2024$YearsCodePro_)
+
+#table(data2024$YearsCode1, data2024$YearsCode2)
+#Interpretare rezultate: 
+#Majoritatea respondentilor au intre 0 si 5 ani de experienta, urmat de cei cu 6-10 ani. Numarul scade semnificativ pentru cei cu experienta mai mare de 10 ani, cu doar 1,707 respondenti avand peste 30 de ani de experienta. Acest lucru sugereaza o industrie predominant tanara, cu o scadere a numarului de profesionisti pe masura ce experienta creste
+```
+
+
+##PurchaseInfluence 
+```{r prelucrare PurchaseInfluence}
+#Aceasta variabila masoara gradul de influenta pe care respondentii il au asupra deciziilor de achizitie a tehnologiilor noi in cadrul organizatiei lor. Aceasta influenteaza satisfactia la job deoarece angajatii care au un impact semnificativ asupra deciziilor de achizitie a tehnologiilor pot simti un grad mai mare de recunoastere si implicare in procesul decizional, ceea ce poate creste sentimentul de valoare si satisfactie in cadrul organizatiei.
+
+var_desc$question[var_desc$qname == "PurchaseInfluence"]
+table(data2024$PurchaseInfluence)
+
+#ransformarea in categorii mai concise si mai usor de interpretat
+data2024 <- data2024 %>%
+  mutate(PurchaseInfluence_ = as.factor(case_when(
+    PurchaseInfluence == "I have a great deal of influence" ~ "High",
+    PurchaseInfluence == "I have some influence" ~ "Medium",
+    PurchaseInfluence == "I have little or no influence" ~ "Low",
+  )))
+
+summary(data2024$PurchaseInfluence_)
+#table(data2024$PurchaseInfluence, data2024$PurchaseInfluence_)
+
+#Interpreatre rezultate:
+#Rezultatele arata ca majoritatea respondentilor au o influenta medie asupra achizitiilor de tehnologie, in timp ce 17,770 au o influenta mica si doar 10,030 au un impact semnificativ. Aceste date sugereaza ca majoritatea angajatilor nu iau decizii majore in privinta achizitiilor de tehnologii. 
+
+```
+##RemoteWork
+```{r prelucrare RemoteWork}
+#Variabila descrie formatul de munca (remote, hibrid, in-person) care influenteaza satisfactia la locul de munca prin flexibilitate, economisirea timpului si cresterea autonomiei, fiecare factor contribuind la reducerea stresului si imbunatatirea echilibrului intre viata personala si profesionala.
+
+var_desc$question[var_desc$qname == "RemoteWork"]
+table(data2024$RemoteWork)
+
+#transformarea variabilei in categorii mai concise
+data2024 <- data2024 %>%
+mutate(RemoteWork_ = as.factor(case_when(RemoteWork == "Remote" ~ "remote", 
+                                     RemoteWork == "Hybrid (some remote, some in-person)" ~ "hybrid", 
+                                      RemoteWork == "In-person" ~ "in-person")))
+
+summary(data2024$RemoteWork_)
+#Interpreatre rezultate:
+#Rezultatele sugereaza ca majoritatea respondentilor lucreaza intr-un format hibrid, urmat de cei care lucreaza remote si cei care lucreaza in-person. Exista, de asemenea, cativa respondenti care nu au specificat situatia lor de munca, dar acestia sunt mult mai putini in comparatie cu celelalte grupuri.
+```
+                                      
+##Knowledge_8 
+```{r prelucrare ToolsResourcesSat}
+#Coloana Knowledge_8 masoara satisfactia respondentilor in legatura cu resursele si instrumentele disponibile pentru a intelege si lucra pe codul/sistemul/platforma companiei lor
+
+var_desc$question[var_desc$qname == "Knowledge_8"]
+table(data2024$Knowledge_8)
+
+#transformarea variabilei in categorii mai concise
+data2024 <- data2024 %>%
+  mutate(ToolsResourcesSat_ = as.factor(case_when(
+    Knowledge_8 %in% c("Strongly disagree", "Disagree") ~ "Nemulțumit",
+    Knowledge_8 == "Neither agree nor disagree" | is.na(Knowledge_8)  ~ "Neutru", #lipsa unui raspuns poate fi interpretata ca o absenta a unei opinii clare
+    Knowledge_8 %in% c("Agree", "Strongly agree") ~ "Mulțumit"
+  )))
+
+summary(data2024$ToolsResourcesSat_)
+
+#Interpretare rezultate:
+#Categoria "multumit" reprezinta majoritatea, ceea ce sugereaza ca majoritatea angajatilor sunt satisfacuti de instrumentele si resursele disponibile pentru a lucra eficient. Nemultumiti sunt o proportie semnificativa, indicand o lipsa de satisfactie legata de instrumentele si resursele companiei. Neutri reprezinta un numar mare, ceea ce sugereaza ca multi angajati nu au o parere clara despre acest aspect, posibil din cauza unei perceptii ambigue sau a unei lipsuri de informare suficienta.  
+```
+##ConvertedCompYearly
+```{r prelucrare ConvertedCompYearly}
+#table(data2024$ConvertedCompYearly)
+#Aceasta variabila masoare nivenul salariuli anual care are o influenta directa asupra satisfactiei la locul de munca, dar aceasta depinde si de contextul personal, de asteptarile individuale si de compararea salariilor cu altele din organizatie sau industrie. 
+
+summary(data2024$ConvertedCompYearly)
+#Salariile anuale ale respondentilor variaza de la un minim de 1 la un maxim de 16,256,603, cu o mediana de 65,221 si o medie de 86,392.
+#25% dintre respondenti au salarii sub 33,296, iar 75% sub 108,002
+#exista 30,774 de raspunsuri lipsa ceea ce poate indica fie o reticenta in a oferi informatii despre salariu, fie o problema de colectare a datelor.
+
+#Împărțire în 4 categorii folosnd quantile. Acestea asigură faptul că fiecare categorie conține un număr relativ similar de observații si permite compararea grupurilor fără a fi influențată de extreme (ex: salarii foarte mari care ar trage media în sus)
+data2024 <- data2024 %>%
+  mutate(CompYearly_ = cut(CompTotal,
+                                  breaks = quantile(CompTotal, probs = c(0, 0.20, 0.5, 0.80, 1), na.rm = TRUE),
+                                  labels = c("Low", "Medium", "High", "Very High")))
+# Verificare distribuție
+summary(data2024$CompYearly_)
+
+data2024 %>%
+  filter(!is.na(CompYearly_)) %>% 
+  ggplot(aes(CompYearly_)) +
+  geom_bar( fill="#ecb1fe", adjust=5) +
+  labs(x = "Salariul anual",
+       y = "Frecventa",
+       caption = "BDSA") +
+  ggtitle("Salariul anual") + theme_gray(base_size = 12)
+
+#Interpretare grafic: 
+#Impartirea pe quantile, ofera o perspectiva echilibrata asupra distributiei salariilor. Distributia arata o concentrare a veniturilor in zona medie, ceea ce poate indica o piata relativ echilibrata.Categoria "Very High" contine mai putine persoane, ceea ce sugereaza ca doar un mic procentaj are salarii exceptional de mari. Categoria "Low" este mai mica decat Medium, ceea ce arata ca majoritatea respondentilor castiga peste quantila inferioara.
+                               
+``` 
+##AIThreat
+```{r prelucrare AIThreat }
+#Aceasta variabila masoara perceptia respondentilor despre amenintarea reprezentata de inteligenta artificiala. Perceptia asupra AI poate influenta satisfactia la locul de munca, in functie de modul in care angajatii percep impactul tehnologiei asupra securitatii locurilor lor de munca si asupra modului in care aceasta le poate facilita activitatea zilnica.
+
+var_desc$question[var_desc$qname == "AIThreat"]
+table(data2024$AIThreat)
+
+#transformarea variabilei in categorii mai concise
+data2024 <- data2024 %>%
+  mutate(AIThreat_ = as.factor(case_when(
+    AIThreat == "No" ~ "Nu",
+    AIThreat == "Yes" ~ "Da",
+    AIThreat == "I'm not sure" | is.na(AIThreat) ~ "Nu sunt sigur" #lipsa unui raspuns este interpretata ca o absenta a unei opinii clare, astfel incat este inclusa in aceeasi categorie cu "I'm not sure"
+  )))
+
+summary(data2024$AIThreat_)
+
+#Interpretare rezultate:
+#Majoritatea respondentilor nu considera AI o amenintare, ceea ce sugereaza o perceptie general pozitiva sau neutra asupra tehnologiei. Un numar semnificativ de oameni  nu sunt siguri, ceea ce indica o lipsa de claritate sau o nevoie de mai multe informatii despre impactul AI.  Doar 4.130 de respondenti considera AI o amenintare, ceea ce arata ca temerile privind AI sunt mai putin raspandite.
+```
+##TimeSearching
+```{r}
+#Aceasta variabila masoara timpul mediu zilnic pe care respondentii il petrec cautand raspunsuri sau solutii la problemele pe care le intalnesc la locul de munca.Timpul excesiv petrecut cautand solutii poate duce la frustrare si scaderea satisfactiei la job, in timp ce un echilibru indica acces la resurse bune si un mediu de lucru eficient.
+
+var_desc$question[var_desc$qname == "TimeSearching"]
+table(data2024$TimeSearching)
+
+#transformarea variabilei in categorii mai concise
+data2024 <- data2024 %>%
+  mutate(TimeSearching_ = as.factor(case_when(
+    TimeSearching == "Less than 15 minutes a day" ~ "-15",
+    TimeSearching == "15-30 minutes a day" ~ "15-30",
+    TimeSearching == "30-60 minutes a day" ~ "30-60",
+    TimeSearching == "60-120 minutes a day" ~ "60-120",
+    TimeSearching == "Over 120 minutes a day" ~ "120+"
+  )))
+
+summary(data2024$TimeSearching_)
+
+#Interpretare rezultate: 
+#Majoritatea petrec 15-60 de minute zilnic cautand solutii, ceea ce sugereaza probleme rezolvabile rapid si acces la o buna documentatie. Un procent mic depaseste 2 ore pe zi, posibil din cauza complexitatii muncii sau a lipsei resurselor adecvate. Numeroase non-raspunsuri indica fie lipsa constientizarii acestui timp, fie cautarea de solutii nu este perceputa ca o activitate distincta.
+```
+
+
+#REGRESIE LOGICA
+
+#Regresia logistica in explicarea satisfactiei la locul de munca
+```{r}
+#Scopul analizei: Analiza factorilor care influenteaza satisfactia angajatilor la locul de munca.
+#Variabila dependenta: Satisfactia la locul de munca, construita pe baza raspunsurilor obtinute la intrebarea: „Cat de multumit sunteti de locul de munca?” (variabila binara, unde 1 reprezinta „satisfacut” si 0 „nesatisfacut”).
+#Variabilele explicative:MainBranch_ (tipul de profesie), YearsCodePro_ (experienta profesionala in ani), PurchaseInfluence_ (influenta asupra achizitiilor de tehnologie in organizatie), RemoteWork_ (tipul de munca), ToolsResourcesSat_ (satisfactia cu instrumentele si resursele de lucru), CompYearly_ (salariul anual), AIThreat_ (perceptia asupra amenintarii reprezentate de inteligenta artificiala), TimeSearching_ (timpul petrecut cautand raspunsuri sau solutii la problemele pe care le intalnesc la locul de munca)
+#Scopul regresiei logistice: Identificarea factorilor semnificativi care influenteaza probabilitatea ca un angajat sa fie satisfacut la locul de munca, avand in vedere variabilele mentionate mai sus. Modelul ofera o estimare a modului in care fiecare dintre acesti factori contribuie la satisfactia generala a angajatilor.
+```
+
+##Variabila dependenta (JobSat)
+```{r variabila target}
+
+table(data2024$JobSat)
+
+#variabila target JobSat este transformata intr-o variabila binara, care ia valoarea: "0" pentru scorurile de satisfactie mai mici sau egale cu 6; "1" pentru scorurile mai mari de 6, ceea ce indica un nivel de satisfactie mai ridicat.
+Model1 <- data2024 %>%
+ mutate(Sat = as.factor(ifelse (JobSat<=6 , "0", "1")))
+table(Model1$Sat)
+# majoritatea respondenților sunt satisfăcuți la locul de muncă, cu un număr semnificativ mai mare de persoane care au o satisfacție ridicată (19695) decât de cei cu satisfacție scăzută (9279).
+```
+##Summary pt variabilele analizate
+```{r}
+#summary pt variabilele analizate si pe care intentionam sa le folosim in modele
+summary(Model1 %>% 
+          select(c(Sat, YearsCodePro_, PurchaseInfluence_, ToolsResourcesSat_, MainBranch_, CompYearly_, AIThreat_, TimeSearching_ )))
+
+ # eliminam NA
+Model1_na <- Model1 %>%
+  filter(!is.na(Sat), 
+         !is.na(YearsCodePro_), 
+         !is.na(PurchaseInfluence_), 
+         !is.na(RemoteWork_), 
+         !is.na(ToolsResourcesSat_),
+         !is.na(MainBranch_),
+         !is.na(CompYearly_), 
+         !is.na(AIThreat_), 
+         !is.na(TimeSearching_))
+
+dim(Model1_na)
+#Au ramas 21971 de inregistari dupa eliminarea raspunsurilor care contin NA
+
+summary(Model1_na %>% 
+          select(c(Sat, YearsCodePro_, PurchaseInfluence_, ToolsResourcesSat_, MainBranch_, CompYearly_, AIThreat_, TimeSearching_)))
+
+
+
+```
+
+##Estimare model
+```{r}
+#glm
+ model1 <- glm(Sat ~ MainBranch_ + YearsCodePro_ + PurchaseInfluence_   + RemoteWork_ + ToolsResourcesSat_ + CompYearly_ + AIThreat_ + TimeSearching_ ,  
+              data = Model1_na,
+              family = "binomial")
+
+summary(model1)
+#Outputul oferă informaţii cu privire la impactul factorilor analizaţi asupra logaritmului raportului şanselor (probabilitatea ca un angajat sa fie satisfacut la locul de munca raportată la probabilitatea de a nu fi satisfacut la locul de munca). Pe baza probabilităţilor din ultima coloană, se deduce că variabilele incluse în analiză au coeficienţi semnificativi statistic. Am extras urmatoarele concluzii:
+# - Persoanele care nu sunt dezvoltatori (Non-Developer) au o probabilitate mai mica de a fi satisfacute comparativ cu dezvoltatorii (coeficient negativ semnificativ).
+# - Cu cat angajatul are mai multi ani de experienta (intre 6-10 ani si mai mult de 10 ani), cu atat este mai mare probabilitatea de a fi satisfacut la locul de munca. In special, cei cu 30+ ani de experienta au o probabilitate semnificativ mai mare de a fi satisfacuti.
+# - Angajatii cu influenta mica sau medie asupra achizitiilor de tehnologii au o probabilitate mai mica de a fi satisfacuti, comparativ cu cei cu influenta mare.
+# - Munca remote are un impact pozitiv asupra satisfactiei, iar munca in-person o scade.
+# - Persoanele nemultumite de instrumentele si resursele de lucru sunt mult mai putin satisfacute comparativ cu cele multumite.
+# - Salariile medii si mari sunt asociate cu o probabilitate mai mare de satisfactie comparativ cu salariile mici.
+# - Cei care nu considera AI o amenintare sau nu sunt siguri in legatura cu acest subiect sunt mai satisfacuti decat cei care considera ca AI reprezinta o amenintare.
+# - Timpul petrecut timpul petrecut cautand raspunsuri sau solutii la problemele pe care le intalnesc la locul de munca (in special mai mult de 60 de minute) este asociat cu o probabilitate mai mica de a fi satisfacuti.
+
+#valoarea AIC de 25581 sugereaza ca, pe baza datelor disponibile, modelul nu este suprasolicitat si se potriveste relativ bine cu datele, avand in acelasi timp o complexitate moderata.
+
+#interpretare model
+as.matrix(exp(coef(model1)))
+
+#Pe baza coeficientelor exponentiate, interpretam efectul fiecarei variabile asupra probabilitatii de a fi satisfacut la locul de munca: 
+#- MainBranch_Non-Developer - 0.73: Persoanele care nu sunt dezvoltatori profesionisti, dar folosesc programarea ca o unealta in muncaau sanse mai mici de a fi satisfacuti cu 27% comparativ cu variabila de referinta , adica cei care sunt dezvoltatori profesionisti.
+
+# - YearsCodePro_6-10 - 1.09: Cei cu 6-10 ani de experienta au sanse cu 9% mai mari de a fi satisfacuti ata de categoria de referinta (0-5).
+# - YearsCodePro_11-15 - 1.20: Cei cu 11-15 ani de experienta au sanse cu 20% mai mari de a fi satisfacuti fata de categoria de referinta (0-5).
+# - YearsCodePro_16-20 - 1.20: Cei cu 16-20 ani de experienta au sanse cu 20% mai mari de a fi satisfacuti fata de categoria de referinta (0-5).
+# - YearsCodePro_20-30 - 1.36: Cei cu 20-30 ani de experienta au sanse cu 36% mai mari de a fi satisfacuti fata de categoria de referinta (0-5).
+# - YearsCodePro_30+ - 1.63: Cei cu 30+ ani de experienta au sanse cu 63% mai mari de a fi satisfacuti fata de categoria de referinta (0-5).
+
+# - PurchaseInfluence_Low - 0.49: Cei cu influenta mica asupra achizitiilor de tehnologie au sanse de satisfactie cu 51% mai mici fata de categoria de referinta, adica cei cu influenta mare.
+# - PurchaseInfluence_Medium - 0.73: Cei cu influenta medie asupra achizitiilor de tehnologie au sanse cu 27% mai mici de a fi satisfacuti fata de cei care au o influenta mare.
+
+# - RemoteWork_in-person - 0.84: Angajatii care lucreaza fizic au sanse cu 16% mai mici de a fi satisfacuti fata de cei care lucreaza hibrid.
+# - RemoteWork_remote - 1.12: Angajatii care lucreaza remote au sanse cu 12% mai mari de a fi satisfacuti fata de cei care lucreaza hibrid.
+
+# - ToolsResourcesSat_Nemultumit - 0.34: Cei nemultumiti de instrumentele si resursele de lucru au sanse de satisfactie cu 66% mai mici fata de categoria de referinta, cei multumiti.
+# - ToolsResourcesSat_Neutru - 0.57: Cei care sunt neutri privind instrumentele si resursele au sanse cu 43% mai mici de a fi satisfacuti fata de categoria de referinta, cei multumiti.
+
+# - CompYearly_Medium - 1.12: Cei cu salarii medii au sanse cu 12% mai mari de a fi satisfacuti fata de cei care fac parte din categoria salariilor mici.
+# - CompYearly_High - 1.12: Cei cu salarii mari au sanse cu 12% mai mari de a fi satisfacuti fata de cei care fac parte din categoria salariilor mici.
+# - CompYearly_Very High - 1.04: Cei cu salarii foarte mari au sanse cu 4% mai mari de a fi satisfacuti, dar diferenta nu este semnificativa fata de cei care fac parte din categoria salariilor mici. O cauza a acestei diferente nesemnificative pot fi responsabilitatiilor mai mari care vin o data cu cresterea salariilor. 
+
+# - AIThreat_Nu - 1.68: Cei care nu considera AI o amenintare au sanse de satisfactie cu 68% mai mari fata de cei care considera ca AI este o amenintare mare.
+# - AIThreat_Nu sunt sigur - 1.38: Cei care nu sunt siguri in privinta amenintarii AI au sanse cu 38% mai mari de a fi satisfacuti fata de cei care considera ca AI este o amenintare mare.
+
+# - TimeSearching_15-30 - 0.92: Cei care petrec intre 15 si 30 de minute cautand raspunsuri sau solutii la problemele pe care le intalnesc la locul de munca un loc de munca au sanse de satisfactie cu 8% mai mici fata de categoria de referinta, cei care petrec mai putin de 15 minute.
+# - TimeSearching_30-60 - 0.84: Cei care petrec intre 30 si 60 de minute cautand raspunsuri sau solutii la problemele pe care le intalnesc la locul de munca un loc de munca au sanse cu 16% mai mici de a fi satisfacuti fata de categoria de referinta, cei care petrec mai putin de 15 minute.
+# - TimeSearching_60-120 - 0.71: Cei care petrec intre 60 si 120 de minute cautand raspunsuri sau solutii la problemele pe care le intalnesc la locul de munca un loc de munca au sanse cu 29% mai mici de a fi satisfacuti fata de categoria de referinta, cei care petrec mai putin de 15 minute.
+# - TimeSearching_120+ - 0.60: Cei care petrec mai mult de 120 de minute cautand raspunsuri sau solutii la problemele pe care le intalnesc la locul de munca au sanse cu 40% mai mici de a fi satisfacuti fata de categoria de referinta, cei care petrec mai putin de 15 minute.
+
+```
+
+## Afisare grafic curba ROC si valoarea AUC
+```{r fig.height=4, fig.width=5}
+pred1 <- predict(model1, type = "response")
+pred1[1:5] 
+length(pred1)
+#Generam un vector cu etichetele pentru cele doua clase
+y_pred_num1 <- ifelse(pred1 > 0.5, 1, 0)
+table(y_pred_num1)
+# Generam Curba ROC
+library(ROCR)
+y_act1 <- Model1_na$Sat
+
+pred <- prediction(pred1, y_act1)
+class(pred1)
+class(Model1_na)
+
+#Curba ROC
+pred %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(colorize = T, lwd = 5)
+abline(coef = c(0,1), lty=2)
+#Curba este situată deasupra diagonalei, ceea ce semnifica că modelul are o capacitate de discriminare între clase, dar mai există loc pentru îmbunătățiri.
+
+# Determinam valoarea AUC
+AUCLog1 <- performance(pred, measure = "auc")@y.values[[1]]
+AUCLog1
+cat("Valoarea AUC pentru Model 1 Regresie Logistica:", round(AUCLog1, 3))
+#Valoarea AUC de 0.681 indica faptul ca modelul are o performanta mai buna decat un model aleatoriu, dar nu este perfect. Modelul are o capacitate moderata de a distinge intre clasele 0 si 1.
+```
+##Concluzii regresia logica
+```{r}
+#Concluzii regresia logica
+# - Modelul logistic sugereaza ca experienta profesionala, influenta asupra achizitiilor, munca remote, satisfactia fata de resursele de lucru si nivelul salarial sunt factori esentiali ai satisfactiei la locul de munca. AI nu este perceputa ca o amenintare majora pentru satisfactia angajatilor, iar timpul petrecut cautand solutii este corelat negativ cu satisfactia.
+# - Modelul are o acuratete de aproximativ 70% si o valoare AUC de 0.681, indicand o capacitate moderata de discriminare intre angajatii satisfacuti si nesatisfacuti.
+```
+
+##Matricea de confuzie
+```{r}
+y_pred1 <- factor(y_pred_num1, labels = c(0, 1))
+caret::confusionMatrix(data = y_pred1, as.factor(y_act1))
+
+#Interpretare rezultate:
+#Predicțiile corecte: Clasa 0 (nesatisfăcută): 1614 predicții corecte, Clasa 1 (satisfăcută): 13793 predicții corecte.
+#Predicțiile greșite:Clasa 0 (nesatisfăcută): 1180 predicții greșite (acestea ar fi fost, de fapt, clasa 1, dar au fost clasificate greșit ca 0), Clasa 1 (satisfăcută): 5393 predicții greșite (acestea ar fi fost, de fapt, clasa 0, dar au fost clasificate greșit ca 1).
+
+#Acuratețea generală a modelului este de 0.7008, ceea ce înseamna că aproximativ 70% dintre predicțiile făcute de model sunt corecte. ACesta este un rezultat decent, dar ar putea fi îmbunătățit, mai ales având în vedere că modelul prezice corect doar o mare parte dintre persoanele satisfăcute, iar pentru persoanele nesatisfăcute, performanța este mai scăzută.
+
+
+```
+
+```{r}
+# Ca sa fim siguri ca variabila target este interpretata ca factor, mai aplicam o data transformarea:
+Model1_na$Sat <- as.factor(Model1_na$Sat)
+Model1_na$YearsCodePro_ = as.factor(Model1_na$YearsCodePro_)
+Model1_na$MainBranch_ = as.factor(Model1_na$MainBranch_)
+Model1_na$PurchaseInfluence_ = as.factor(Model1_na$PurchaseInfluence_)
+Model1_na$TimeSearching_ = as.factor(Model1_na$TimeSearching_)
+Model1_na$RemoteWork_ = as.factor(Model1_na$RemoteWork_)
+Model1_na$CompYearly_= as.factor(Model1_na$CompYearly_)
+Model1_na$ToolsResourcesSat_ = as.factor(Model1_na$ToolsResourcesSat_)
+Model1_na$AIThreat_ = as.factor(Model1_na$AIThreat_)
+```
+
+
+
+# ARBORI DE CLASIFICARE
+##Utilizarea arborilor de clasificare pentru a explica factorii care influenteaza satisfacția la locul de muncă
+```{r}
+#Datele analizate provin de la profesionisti din domeniul IT care sunt activi in diverse sectoare economice.
+#Variabila dependenta este „Sat”, care masoara nivelul de satisfactie la locul de munca. Aceasta este o variabila categoriala, cu valori 1 (satisfactie mare) si 0 (satisfactie scazuta).
+#Scopul analizei este de a construi un model de clasificare utilizand arbori de decizie pentru a identifica factorii care influenteaza satisfactia angajatilor.
+#Factori analizati includ:
+# - YearsCodePro_: numarul de ani de experienta in domeniul IT.
+# - PurchaseInfluence_: gradul de influenta asupra deciziilor de achizitie al angajatului in organizatie (high, medium, low)
+# - RemoteWork_: tipul de munca(remote, hybrid, in-person) 
+# - ToolsResourcesSat_: gradul de satisfactie al angajatului fata de instrumentele si resursele de care dispune la locul de munca (nemultumit, neutru, multumit).
+# - CompYearly_: venitul anual estimat al angajatului.
+# - AIThreat_: perceptia angajatului privind posibilele amenintari ale inteligentei artificiale asupra locului sau de munca (da, nu, nu sunt sigur)
+# - TimeSearching_: timpul dedicat cautand raspunsuri sau solutii la problemele pe care le intalnesc la locul de munca.
+#Modelul de clasificare utilizat este un arbore de decizie (rpart), care ajuta la identificarea si clasificarea indivizilor pe baza acestor factori. In acest model, arborii de decizie vor ajuta la predictia satisfactiei angajatilor la locul de munca pe baza setului de factori influentatori.
+
+```
+
+```{r}
+#Identificarea numarului de informatii pentru setul de antrenament (80%) 
+num_rows = nrow(Model1_na)
+nb_sample = floor(num_rows * 0.8)
+nb_sample
+```
+
+## Train si Test
+```{r}
+
+set.seed(1234)
+?sample 
+
+#TRAIN
+train <- sample(1:num_rows, nb_sample, replace=F)
+date_train <-Model1_na[train, ]
+dim(date_train)
+round(nrow(date_train)/nrow(Model1_na), 2)
+# head(date_train)
+
+#TEST
+date_test <- Model1_na[-train, ]
+dim(date_test)
+round(nrow(date_test)/nrow(Model1_na), 2)
+# head(date_test)
+
+#Setul de antrenare (Train) are 17,576 observatii (80% din total).
+#Setul de testare (Test) are 4,395 observatii (20% din total).
+
+round(prop.table(table(date_train$Sat)), 2)
+#32% dintre observatii sunt din clasa 0 (probabil utilizatori nesatisfacuti).
+#68% dintre observatii sunt din clasa 1 (probabil utilizatori satisfacuti).
+#Aceasta distributie arata un dezechilibru moderat intre clase. Pentru a rezolva dezechilibrul, o sa trebuiasca generate date sintetice pe setul de antrenament folosind SMOTE.
+```
+
+##SMOTE 
+
+```{r}
+# Specificarea listei de predictori care vor fi folositi pentru generarea datelor sintetice folosind SMOTE oversampling
+selected_features <- c("Sat", "YearsCodePro_", "PurchaseInfluence_", "RemoteWork_", "ToolsResourcesSat_", "CompYearly_",  "AIThreat_",  "TimeSearching_" )
+
+#Construirea unui nou set de date
+imb_data <- date_train[, selected_features]
+dim(imb_data)
+table(imb_data$Sat)
+
+library(ggplot2)
+library(dplyr)
+# Crearea unui tabel cu procente
+class_distribution <- as.data.frame(round(prop.table(table(imb_data$Sat)), 2))
+
+# Verifică dimensiunea înainte de a redenumi coloanele
+print(dim(class_distribution))
+
+# Redenumire coloane
+colnames(class_distribution) <- c("Sat", "Percentage")
+
+# Conversia coloanei Sat la factor
+class_distribution$Sat <- as.factor(class_distribution$Sat)
+
+# Afisare procente
+class_distribution$Percentage <- class_distribution$Percentage * 100
+
+# Vizualizare tabel
+print(class_distribution)
+
+#grafic
+ggplot(class_distribution, aes(x = Sat, y = Percentage, fill = Sat)) +
+  geom_bar(stat = "identity", width = 0.4) + 
+  labs(title = "Class Distribution of Sat",
+       x = "Sat",
+       y = "Percentage (%)") +
+  theme_minimal() +  # Use a clean theme
+  scale_fill_manual(values = c("#F8766D", "#00BFC4")) + 
+  geom_text(aes(label = paste0(Percentage, "%")), vjust = -0.5) 
+
+#Graficul arata distributia celor doua clase dezechilibrate.
+
+```
+
+```{r}
+
+library(caret)
+# aplicarea one-hot encoding variabilelor categorice (Variabilele categorice din imb_data vor fi transformate în coloane numerice binare (0 sau 1))
+dummy_model <- dummyVars(Sat ~ ., data = imb_data, fullRank = TRUE)  
+
+# Crearea unui data frame cu  variabilele one-hot encoded 
+df_encoded <- predict(dummy_model, newdata = imb_data)
+df_encoded <- as.data.frame(df_encoded)
+
+#Adaugarea variabilei target in noul set de date
+df_encoded$Sat <- imb_data$Sat
+
+round(prop.table(table(df_encoded$Sat)), 2)
+
+
+library(smotefamily)
+# Apicare SMOTE 
+set.seed(1234) 
+
+smote_result <- SMOTE(X = subset(df_encoded, select=-Sat), target = df_encoded$Sat, 
+                      K = 5, dup_size = 1) 
+                            
+
+smote_df <- data.frame(smote_result$data)
+names(smote_df)[ncol(smote_df)] <- "Sat"
+smote_df$Sat <- as.factor(smote_df$Sat)
+
+
+#Distributia variabilei target dupa aplicarea SMOTE
+table(smote_df$Sat)
+round(prop.table(table(smote_df$Sat)), 2)
+table(imb_data$Sat)
+
+#reprezentarea grafica
+smote_distribution <- as.data.frame(round(prop.table(table(smote_df$Sat)), 2))
+colnames(smote_distribution) <- c("Sat1", "Percentage")
+smote_distribution$Sat <- as.factor(smote_distribution$Sat)
+smote_distribution$Percentage <- smote_distribution$Percentage * 100
+
+ggplot(smote_distribution, aes(x = Sat, y = Percentage, fill = Sat)) +
+  geom_bar(stat = "identity", width = 0.4) +  
+  labs(title = "Class Distribution of Sat after applying SMOTE",
+       x = "Sat",
+       y = "Percentage (%)") +
+  theme_minimal() +  
+  scale_fill_manual(values = c("#F8766D", "#00BFC4")) +  
+  geom_text(aes(label = paste0(Percentage, "%")), vjust = -0.5)  
+
+#După aplicarea SMOTE, clasa 0 are aproximativ 49% dintre exemple și clasa 1 are aproximativ 51%. Acesta este un semn că SMOTE a reechilibrat datele, ceea ce ar putea ajuta la antrenarea unui model care să nu fie părtinitor față de clasa majoritară.
+```
+
+
+##Aplicarea one-hot encoding variabilelor categorice pe setul de test
+```{r}
+#Pentru setul de test
+imb_data_test <- date_test[, selected_features]
+dummy_model_test <- dummyVars(Sat ~ ., data = imb_data_test, fullRank = TRUE)
+df_encoded_test <- predict(dummy_model_test, newdata = imb_data_test)
+df_encoded_test <- as.data.frame(df_encoded_test)
+df_encoded_test$Sat <- imb_data_test$Sat
+
+round(prop.table(table(df_encoded_test$Sat)), 2)
+
+#Redenumirea coloanelor pentru a avea aceleasi nume ca si datele din setul de antrenament
+colnames(df_encoded_test) <- gsub("-", ".", colnames(df_encoded_test))
+colnames(df_encoded_test) <- gsub(" ", ".", colnames(df_encoded_test))
+colnames(df_encoded_test) <- gsub("\\+", ".", colnames(df_encoded_test))
+
+#se verifica daca numele coloanelor corespund
+  setdiff(colnames(smote_df), colnames(df_encoded_test))
+setdiff(colnames(df_encoded_test), colnames(smote_df))
+```
+
+## Estimarea arborelui
+```{r}
+library(rpart)
+library(rpart.plot)
+
+# Construim arborele de decizie pe datele echilibrate (după SMOTE)
+arbore <- rpart(Sat ~ ., data = smote_df, method = "class",  minsplit = 2, 
+               minbucket = 1,  
+               maxdepth=5, 
+               cp=0)
+
+
+# Analiza rezultatelor
+printcp(arbore)
+#Arborele de decizie a selectat 7 variabile importante pentru clasificarea satisfacției la locul de muncă.
+
+
+#Vizualizare rezultate
+plotcp(arbore) 
+
+#Interpreatre grafic:
+#Arborele trebuie taiat (pruned) folosind o valoare de cp în jur de 0.0012, deoarece dupa acest punct nu mai există beneficii semnificative asupra erorii.
+#Alegerea unui cp prea mic (ex. 0.00046) crește riscul de supraînvățare (overfitting).
+#Dacă cp este prea mare (ex. 0.022), modelul este prea simplu și nu captează suficient modelele din date.
+```
+
+## Plot prp
+```{r fig.width=12, fig.height=8}
+?prp
+prp(arbore, type=2, extra=106, under=TRUE, fallen.leaves=FALSE, box.palette = "BuPu", tweak = 1.5, varlen = 0, faclen = 0) #, cex = 0.8
+
+#Arborele este mult prea complex, are multe noduri (splits), ceea ce creste riscul de overfitting
+#Unele ramuri pot avea foarte puține observații (ex. nodurile de jos cu 1% sau chiar aproape 0% din date). Aceste noduri sunt probabil zgomot și nu adaugă valoare semnificativa.
+
+```
+
+
+##Importanta variabilelor
+```{r}
+arbore$variable.importance
+summary(arbore)
+
+#Interpretare:
+#Cea mai mare influență asupra satisfacției este dată de resursele și instrumentele de lucru.
+#Angajații cu influență scăzuta in achizitii sunt mai predispuși la nemulțumire.
+#Frica de AI poate influența satisfacția - cei care NU se tem de AI sunt mai satisfăcuți.
+#Experienta profesională are un impact pozitiv - mai multi ani de experiență cresc satisfacția.
+#Timpul petrecut căutând solutii afectează satisfacția - un echilibru intre documentare si muncă efectivă este important.
+```
+
+## Prune - cp optim
+```{r}
+
+### Arbore final cp=0.0015
+
+arboref <- prune.rpart(arbore, cp = 0.0015)
+summary(arboref)
+#Arborele este acum mai mic (5 splits), ceea ce il face mai interpretabil si mai robust.
+#Rata de eroare este destul de mare în nodul rădăcină, dar aceasta scade pe măsură ce arborele se împarte, iar erorile din validarea încrucișată sugerează că modelul este robust.
+#Factorii care influențează cel mai mult satisfacția sunt legate de resursele de lucru si influența percepută asupra achizițiilor.
+
+#Arborele cu CP = 0.0015 este o alegere optima, deoarece: reduce complexitatea modelului fara a pierde semnificativ performanta; previne overfitting-ul, permitand o mai buna generalizare pe date noi; confirma importanta variabilelor principale (ToolsResourcesSat_ si PurchaseInfluence_).
+
+#Plot
+prp(arboref, type=2, extra=106, under=TRUE, fallen.leaves=TRUE, box.palette = "BuPu", tweak = 1, varlen = 0, faclen = 0) 
+
+#Interpretare noduri frunza:
+# Nod stanga:  (0.34, 29%). Această frunză indică faptul că 29% dintre observațiile care au ajuns aici au fost clasificate ca 0 (nemulțumit).
+#Caracteristica principală care le-a dus în acest nod este ToolsResourcesSat_.Nemulțumit, adică aceste persoane nu sunt nemulțumite de resursele și instrumentele disponibile.
+
+#Nod mijloc (0.57, 1%). Acest nod frunză reprezintă doar 1% din observații, iar majoritatea au fost clasificate ca 1 (mulțumit). Se referă la utilizatorii care au un nivel scăzut de influență asupra achizițiilor și o experiență în programare de sub 11-15 ani.
+
+#Nod dreapta (0.65, 43%). Aceasta este cea mai mare frunză din arbore, cu 43% din observații clasificate ca 1 (mulțumit). Aceste observații provin din utilizatori care au o satisfacție neutră sau mai mare față de resursele disponibile.
+```
+## Reguli de decizie
+```{r}
+#View(rpart.rules(arboref, extra = 4, cover = TRUE))
+```
+
+
+
+# RANDOM FOREST
+## Estimarea modelului
+```{r}
+  # Train model
+  RFfit <- randomForest(Sat ~ ., data = smote_df, ntrees=50, maxnodes=40, method="class")
+  RFfit$type 
+ # RFfit$oob.times
+  RFfit$confusion 
+#Interpretare:Precizie mai mare pentru clasa 1 decât pentru clasa 0. Clasa 0 este mai greu de prezis corect (are o rată de eroare mai mare: 44.41%), iar clasa 1 este mai ușor de prezis corect (rată de eroare de 27.96%)
+  RFfit$importance 
+  varImpPlot(RFfit)
+#Interpretare: Variabilele cu cea mai mare importanță sunt legate de nemulțumirea față de resursele și instrumentele disponibile și influența de achiziție. Acestea sunt caracteristici esențiale pentru predicțiile modelului. Experiența profesională și tipul de muncă (remote vs. în persoană) sunt, de asemenea, factori importanți, dar mai puțin semnificativi în comparație cu celelalte variabile. Percepția amenințării IA și compensarea anuală au o importanță moderată, indicând faptul că aceste variabile influențează deciziile, dar nu sunt decisive.
+  
+  plot(RFfit)
+#Interpretare: Inițial, eroarea scade rapid pe măsură ce se adaugă mai mulți arbori. După aproximativ 100 de arbori, eroarea se stabilizează, indicând că adăugarea mai multor arbori nu îmbunătățește semnificativ performanța modelului.
+
+  
+  # Predict on training data to compare actual vs. predicted
+RFpred_train <- predict(RFfit, smote_df, type = "prob")[,2]
+RFpred_train[0:10]
+RFpred_test <- predict(RFfit, df_encoded_test, type = "prob")[,2]
+RFpred_test[0:10]
+
+# View(RFpred_train)
+class(RFpred_train)
+length(RFpred_train)
+
+# Predictii Random Forest - TRAIN set
+y_pred_num_train_RF <- ifelse(RFpred_train > 0.5, 1, 0)
+y_pred_train_RF <- factor(y_pred_num_train_RF, levels = c(0, 1))
+y_act_train <- smote_df$Sat
+
+library(caret)
+confusionMatrix(data = y_pred_train_RF, as.factor(y_act_train))
+
+#Interpretare:
+#Modelul Random Forest atinge o acuratete de 64.36%, ceea ce inseamna ca aproximativ doua treimi dintre predictii sunt corecte.
+#Sensibilitate (Recall pentru clasa 0 - nemultumiti): 55.61% Modelul identifica corect 55.61% dintre observatiile din clasa 0.
+#Specificitate (Recall pentru clasa 1 - multumiti): 72.62% Modelul identifica mai bine clasa 1, detectand 72.62% dintre cazurile de utilizatori multumiti.
+
+# Predictii Random Forest - TEST set
+y_pred_num_test_RF <- ifelse(RFpred_test > 0.5, 1, 0)
+y_pred_test_RF <- factor(y_pred_num_test_RF, levels = c(0, 1))
+y_act_test <- df_encoded_test$Sat
+length(RFpred_test)
+length(y_pred_test_RF)
+confusionMatrix(data = y_pred_test_RF, as.factor(y_act_test))
+
+#Interpretare:
+#Modelul atinge o acuratete de 65.69%, ceea ce inseamna ca aproximativ 2 din 3 predictii sunt corecte.
+#Modelul Random Forest are o performanta moderata pe setul de testare, dar este mai slab decat pe setul de antrenare.
+#Modelul prezice mai bine utilizatorii multumiti (1) decat utilizatorii nemultumiti (0), ceea ce poate fi o problema daca dorim sa identificam utilizatorii nemultumiti pentru imbunatatiri.
+```
+
+## ROC - AUC
+```{r}
+
+## Predictii DT
+
+# Predictii Arbore de Clasificare - TRAIN set
+DTpred_train <- predict(arboref, smote_df, type = "prob")[,2]
+y_pred_num_train_DT <- ifelse(DTpred_train > 0.5, 1, 0)
+y_pred_train_DT <- factor(y_pred_num_train_DT, levels = c(0, 1))
+y_act_train <- smote_df$Sat
+length(DTpred_train)
+
+# Predictii Arbore de Clasificare - TEST set
+DTpred_test <- predict(arboref, df_encoded_test, type = "prob")[,2]
+y_pred_num_test_DT <- ifelse(DTpred_test > 0.5, 1, 0)
+y_pred_test_DT <- factor(y_pred_num_test_DT, levels = c(0, 1))
+y_act_test <- df_encoded_test$Sat
+
+
+# Calculam valoarea AUC pentru curba ROC 
+library(ROCR)
+#?prediction
+#?performance
+
+## Calculam valoarea AUC pentru Arborele de clasificare 
+
+# TRAIN - DT
+
+pr_DT_train <- prediction(DTpred_train, smote_df$Sat, label.ordering = NULL)
+pr_DT_train
+
+```
+```{r include=FALSE}
+pr_DT_train@predictions
+pr_DT_train@labels
+```
+```{r}
+perf_DT_train <- performance(pr_DT_train,"tpr","fpr")
+perf_DT_train
+
+plot(perf_DT_train, colorize=TRUE, lwd=5)
+
+AUC_DT_train = performance(pr_DT_train, measure = "auc")@y.values[[1]]
+cat("AUC - Arbore de clasificare Train Set: ", AUC_DT_train, "\n")
+
+confusionMatrix(data = y_pred_train_DT, as.factor(y_act_train))
+
+#Interpretare:
+#Din grafic si din valoarea AUC= 0.65 reiese faptul ca modelul nu este perfect, dar are o capacitate rezonabila de a face distinctia intre cele doua clase.
+#Acuratete (Accuracy) = 63.83%. Procentajul total al clasificarilor corecte. Un scor de 63.8% este moderat, dar nu impresionant.
+
+# TEST - DT
+library(ROCR)
+pr_DT_test <- prediction(DTpred_test, df_encoded_test$Sat, label.ordering = NULL)
+pr_DT_test
+perf_DT_test <- performance(pr_DT_test,"tpr","fpr")
+perf_DT_test
+plot(perf_DT_test, colorize=TRUE, lwd=5)
+
+AUC_DT_test = performance(pr_DT_test, measure = "auc")@y.values[[1]]
+cat("AUC - Arbore de clasificare test Set: ", AUC_DT_test, "\n")
+
+confusionMatrix(data = y_pred_test_DT, as.factor(y_act_test))
+
+#Interpretare
+#Curba ROC arată că modelul face un compromis între rata de adevărate pozitive (TPR) și rata de false pozitive (FPR). Nu este foarte abruptă și tinde spre diagonală, ceea ce indică o separare slabă a claselor.
+#AUC = 0.6348.  Modelul are o performanță moderată, dar sub 0.65, ceea ce indică o capacitate limitată de a distinge între clase.
+#Acuratețe (Accuracy) = 65.39%. Un scor moderat, ceea ce înseamnă că modelul face greșeli semnificative.
+
+```
+## Calculam curba ROC pentru Random Forest atat pe Train, cat si pe Test si calculam si AUC
+
+```{r}
+# TRAIN - RF
+pr_RF_train <- prediction(RFpred_train, smote_df$Sat, label.ordering = NULL)
+pr_RF_train
+perf_RF_train <- performance(pr_RF_train,"tpr","fpr")
+perf_RF_train
+plot(perf_RF_train, colorize=TRUE, lwd=5)
+
+confusionMatrix(data = y_pred_train_RF, as.factor(y_act_train))
+?confusionMatrix
+
+AUC_RF_train = performance(pr_RF_train, measure = "auc")@y.values[[1]]
+cat("AUC - Random Forest Train Set: ", AUC_RF_train, "\n")
+
+#Interpretare:
+#Curba are o crestere progresiva, indicand faptul ca modelul face diferentiere destul de bine intre clasele 0 si 1.
+#Zona sub curba (AUC) este de 0.6987, ceea ce sugereaza o performanta decenta, dar nu ideala.
+
+# TEST - RF
+pr_RF_test <- prediction(RFpred_test, df_encoded_test$Sat, label.ordering = NULL)
+pr_RF_test
+perf_RF_test <- performance(pr_RF_test,"tpr","fpr")
+perf_RF_test
+plot(perf_RF_test, colorize=TRUE, lwd=5)
+
+confusionMatrix(data = y_pred_test_RF, as.factor(y_act_test))
+?confusionMatrix
+
+AUC_RF_test = performance(pr_RF_test, measure = "auc")@y.values[[1]]
+cat("AUC - Random Forest Train test Set: ", AUC_RF_test, "\n")
+
+#Interpretare:
+#Performanta modelului pe setul de testare este usor mai slaba decat pe setul de antrenament.
+#AUC = 0.6726, ceea ce inseamna ca modelul Random Forest prezinta o usoara scadere a capacitatii de clasificare fata de antrenament.
+
+
+```
+
+```{r fig.height=8, fig.width=8}
+# ROC Plots - AUC Train vs. Test ----------------------------------------------------------------
+
+# windows()
+par(mfrow=c(2,2))
+
+
+# *************************
+#   Arbore de Clasificare
+# *************************
+# windows()
+prediction(DTpred_train, smote_df$Sat) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(col ='dodgerblue2', lwd=2, lty=1, main="AUC Arbore de Clasificare \n TRAIN vs. TEST")
+par(new=TRUE)
+prediction(DTpred_test, df_encoded_test$Sat) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(col ='skyblue', lwd=2, lty=1)
+abline(coef = c(0,1), lty=2)
+# Add a legend
+legend("bottomright", legend=c("DT Train", "DT Test"),
+       col=c("dodgerblue2", "skyblue"), lty=1:1, cex=1)
+# legend("bottomright", legend=c(cat("DT Train:", round(AUC_DT_train,2)), cat("DT Test:", round(AUC_DT_test,2))),
+#        col=c("dodgerblue2", "skyblue"), lty=1:1, cex=0.5)
+cat("DT Train:", round(AUC_DT_train,3))
+cat("DT Test:", round(AUC_DT_test,3))
+
+
+
+# ******************
+#   Random Forest
+# ******************
+# windows()
+prediction(RFpred_train, smote_df$Sat) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(col ="firebrick3", lwd=2, lty=1, main="AUC Random Forest \n TRAIN vs. TEST")
+par(new=TRUE)
+prediction(RFpred_test, df_encoded_test$Sat) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(col ="lightsalmon", lwd=2, lty=1)
+abline(coef = c(0,1), lty=2)
+# Add a legend
+legend("bottomright", legend=c("RF Train", "RF Test"),
+       col=c("firebrick3", "lightsalmon"), lty=1:1, cex=1)
+cat("RF Train:", round(AUC_RF_train,3))
+cat("RF Test:", round(AUC_RF_test,3))
+
+
+# ************************************
+#   Ambele modelele pe acelasi grafic
+# ************************************
+#   Train set
+# windows()
+prediction(DTpred_train, smote_df$Sat) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(col ='dodgerblue2', lwd=2, lty=1, main="Comparatie AUC Modele - TRAIN")
+par(new=TRUE)
+prediction(RFpred_train, smote_df$Sat) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(col ="firebrick3", lwd=2, lty=1)
+abline(coef = c(0,1), lty=2)
+# Add a legend
+legend("bottomright", legend=c("DT Train", "RF Train"),
+       col=c("dodgerblue2", "firebrick3"),
+       lty=1:1, cex=0.8)
+
+
+#  Test set
+# windows()
+prediction(DTpred_test, df_encoded_test$Sat) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(col ='skyblue', lwd=2, lty=1, main="Comparatie AUC Modele - TEST")
+par(new=TRUE)
+prediction(RFpred_test, df_encoded_test$Sat) %>%
+  performance(measure = "tpr", x.measure = "fpr") %>%
+  plot(col ="lightsalmon", lwd=2, lty=1)
+abline(coef = c(0,1), lty=2)
+# Add a legend
+legend("bottomright", legend=c("DT Test", "RF Test"),
+       col=c("skyblue", "lightsalmon"),
+       lty=1:1, cex=0.8)
+#Interpretare Arbore de Clasificare:
+#Performanta pe setul de test este mai slaba decat pe antrenament, ceea ce indica posibil overfitting (modelul se potriveste bine pe train, dar nu generalizeaza perfect pe test).
+#AUC pentru test este mai mica decat pe train, ceea ce arata ca modelul de decizie are o capacitate limitata de generalizare.
+
+#Interpretare Random Forest:
+#Random Forest se comporta mai bine decat arborele de decizie, avand o AUC mai mare si pe train, si pe test.
+#Performanta pe test este mai apropiata de cea de pe train, ceea ce indica o generalizare mai buna, spre deosebire de DT.
+
+#Interpretare: Comparatie AUC Modele - TRAIN
+#Se observa ca Random Forest are o curba ROC mai sus decat DT, ceea ce arata ca RF face o predictie mai precisa si separa mai bine clasele.
+
+#Interpretare: Comparatie AUC Modele - TEST
+#Random Forest are o AUC mai mare decat DT si pe setul de test, confirmand ca este un model mai robust.
+#Arborele de Decizie scade mai mult pe test, ceea ce indica ca se potriveste mai bine pe antrenament si sufera de overfitting
+
+```
+##Concluzii Arbori de clasificare (arbore de decizie si random forest)
+```{r}
+# Modelul Random Forest este superior Arborelui de Decizie datorita unei AUC mai mari si unei mai bune generalizari.
+#Ambele modele pot fi imbunatatite, deoarece AUC nu depaseste 0.70, ceea ce sugereaza ca sunt necesare optimizari suplimentare (ex: selectia variabilelor, tuning-ul hiperparametrilor, utilizarea unui model mai complex).
+#Random Forest are o rata mai buna de clasificare a exemplelor pozitive, dar mai trebuie ajustat pentru a reduce erorile pe clasa negativa.
+
+```
+
+#ANALIZA CORESPONDENTEI
+
+##Satisfactia la job in functie de dimensiunile organizatiei
+
+###Prelucrarea variabilelor
+```{r}
+#Variabila JobSat (satisfactia la job)
+table(data2024$JobSat)
+#transformarea variabilei JobSat într-o variabila categoriala cu 5 nivele, de la "Foarte nesatisfăcut" până la "Foarte satisfăcut"
+Model_ac<-data2024
+Model_ac$JobSat<- cut(data2024$JobSat, 
+                                breaks = c(-1, 2, 4, 6, 8, 10), 
+                                labels = c("Foarte nesatisfăcut", "Nesatisfăcut", "Neutru", "Satisfăcut", "Foarte satisfăcut"))
+
+table(Model_ac$JobSat)
+
+#Variabila OrgSize (dimensiunea organizatiei)
+table(data2024$OrgSize)
+
+#transformarea variabilei OrgSize într-o variabila categoriala cu 5 nivele
+Model_ac<-Model_ac %>%
+  mutate(OrgSize = as.factor(case_when(
+    OrgSize %in% c("Just me - I am a freelancer, sole proprietor, etc.", "2 to 9 employees") ~ "Microintreprindere",
+    OrgSize %in% c("10 to 19 employees", "20 to 99 employees") ~ "Intreprindere_mica",
+    OrgSize %in% c("100 to 499 employees", "500 to 999 employees") ~ "Intreprindere_mijlocie",
+    OrgSize %in% c("1,000 to 4,999 employees", "5,000 to 9,999 employees") ~ "Intreprindere_mare",
+    OrgSize %in% c("10,000 or more employees") ~ "Corporatie"
+  )))
+
+table(Model_ac$OrgSize)
+```
+
+### Reprezentarea grafica a celor doua variabile categoriale 
+```{r}
+grafic_ac1<-Model_ac  %>%
+  filter(!is.na(JobSat))  %>% 
+  filter(!is.na(OrgSize))  %>% 
+  group_by(JobSat, OrgSize) %>% 
+  dplyr::summarise(n=n())  %>% 
+  mutate(freq = n / sum(n)) %>% 
+  ggplot() +
+  geom_col(aes(x=reorder(JobSat,n), y=n, fill=OrgSize))+
+  labs(x="JobSat")+
+  scale_fill_brewer(palette="Paired")
+grafic_ac1
+
+#Interpretare:
+# Organizatiile mari tind sa aiba angajati mai satisfacuti, probabil datorita stabilitatii locului de munca, beneficiilor mai bune si oportunitatilor de crestere.
+#Intreprinderile mici si mijlocii au o distributie mai echilibrata a satisfactiei, ceea ce arata ca pot exista diferente semnificative intre conditiile de munca din aceste tipuri de organizatii.
+#Microintreprinderile au o satisfactie polarizata, avand atat angajati foarte multumiti, cat si nemultumiti, ceea ce poate indica un mediu de lucru variabil.
+
+```
+
+###Matricea de contingență
+```{r}
+attach(Model_ac)
+m3_ac <- table(JobSat, OrgSize)
+m3_ac
+#View(as.matrix(m3_ac))
+#Interpretare: 
+#Cele mai multe persoane satisfacute se afla in intreprinderile mici si mijlocii, urmate de intreprinderi mari si microintreprinderi.
+#Nemultumirea este mai ridicata in intreprinderile mici si mijlocii, unde procentul angajatilor nesatisfacuti este mai mare.
+#Corporatiile si intreprinderile mari au o distributie mai echilibrata, dar totusi cu un numar mare de angajati satisfacuti.
+
+```
+###Modelul si harta
+```{r}
+corespondente_JobSat <- ca(m3_ac)
+summary(corespondente_JobSat)
+
+#Pentru a reprezenta informatia diuntr-un tabel de 5x5 avem nevoie de 4 dimensiuni.
+#Reprezentăm grafic informaţia din tabel folosind analiza corespondenţelor şi observăm că avem nevoie de 2 dimensiuni care preiau 98.6% din inerția totală. Prima axă explică 83.9% din inerţia totală, iar cealaltă 14.7%.
+
+#Punctele corespunzatoare satisfactiei au o reprezentare excelentă pe harta corespondențelor, ceea ce înseamnă că sunt foarte bine plasate în contextul datelor.
+#Punctul reprezentatat de "foarte nemultumit" are o contribuție semnificativă la inertia totala, urmata de "foarte multumit" ceea ce le face esențiale pentru înțelegerea relațiilor dintre satisfacția la job și dimensiunea organizației. Celelate puncte au o contributie mai mica la inertia totala. 
+#"Foarte nemultumit" are o contribuție mare pe axa 2, ceea ce sugerează că schimbările în satisfacția „Foarte nesatisfăcut” sunt influențate mai mult de a doua axă decât de prima axă.
+
+#Microintreprinderile,  corporatiile si intreprinderiile mijlocii sunt cel mai bine reprezentate pe harta. intreprinderile mici sunt mai putin bine reprezentate pe harta, dar totusi nu foarte rau avand un qlt=561.
+#Punctul reprezentatat de  Microintreprinderi are o contribuție semnificativă la inertia totala, urmata de Corporatii si intreprinderi mijlocii. celelate doua au o contributie mica la inertia totala. 
+
+# windows()
+plot(corespondente_JobSat, lines=c(FALSE, F), 
+     main=" Analiza corespondentelor")
+
+#Analiza pe axa orizontala (stanga-dreapta – Dimensiunea 1, 83.9%)
+#„Foarte nesatisfacut” este cel mai izolat in partea stanga, indicand o asociere puternica cu corporatiile.
+#„Nesatisfacut” si „Neutru” sunt aproape de centru, sugerand ca aceste categorii nu sunt clar asociate cu un anumit tip de organizatie.
+#Intreprinderile mari si mijlocii sunt aproape de centru, ceea ce inseamna ca au o distributie echilibrata a satisfactiei.
+#„Foarte satisfacut” este extrem in partea dreapta, indicand o asociere puternica cu microintreprinderile.
+#„Satisfacut” este plasat usor spre dreapta, ceea ce arata ca firmele mai mici tind sa aiba angajati mai multumiti.
+#Intreprinderile mici si microintreprinderile sunt pozitionate in dreapta, ceea ce sugereaza ca in aceste organizatii predomina niveluri mai ridicate de satisfactie.
+
+#Analiza pe axa verticala (sus-jos – Dimensiunea 2, 14.7%)
+#„Foarte nesatisfacut” este cel mai sus, ceea ce sugereaza o situatie extrema, diferita de celelalte categorii.
+#Corporatiile sunt tot mai sus, indicand ca angajatii lor pot avea o satisfactie scazuta.
+#„Satisfacut” si „Foarte satisfacut” sunt mai jos, ceea ce inseamna ca aceste categorii sunt mai stabile si predictibile.
+#Intreprinderile mijlocii si mari sunt situate jos, ceea ce sugereaza o distributie mai echilibrata a satisfactiei.
+#„Microintreprinderile” sunt in extrema dreapta-jos, ceea ce confirma ca angajatii lor tind sa fie fie foarte satisfacuti, fie foarte nemultumiti.
+
+#Asocieri:
+#Foarte nesatisfacut este asociat cu corporatiile, sugerand un grad mai mare de nemultumire in aceste organizatii mari.
+#Foarte satisfacut este strans legat de microintreprinderi, ceea ce indica faptul ca angajatii din firme mici pot avea o satisfactie ridicata.
+#Neutru si nesatisfacut sunt mai apropiate de intreprinderile mici si mijlocii, aratand o distributie echilibrata a satisfactiei.
+#Intreprinderile mari se afla mai aproape de categoria satisfacut, sugerand un nivel mediu spre ridicat al satisfactiei.
+
+#Concluzii:
+# - Axele separa clar nesatisfactia (stanga-sus, corporatii) de satisfactie (dreapta-jos, microintreprinderi).
+# - Exista o tendinta ca firmele mari sa genereze mai multa satisfactie sau nemultumire extrema, in timp ce firmele mici au o satisfactie mai polarizata.
+
+```
+#Concluzii ANALIZA CORESPONDENTEI
+```{r}
+# - Angajatii din microintreprinderi tind sa fie fie foarte satisfacuti, fie foarte nemultumiti, ceea ce sugereaza o polarizare a perceptiilor in firmele mici.
+# - Corporatiile sunt mai frecvent asociate cu angajati nemultumiti, probabil din cauza rigiditatii structurale si lipsei controlului individual asupra deciziilor.
+# - Intreprinderile mijlocii si mari au o distributie mai echilibrata, fara extreme evidente de satisfactie sau nemultumire.
+# - Analiza corespondentelor confirma ca tipul organizatiei influenteaza satisfactia angajatilor, dar nu este un factor exclusiv determinant.
+```
+
