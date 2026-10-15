@@ -1,0 +1,10 @@
+.Rhistory
+.RData
+.Ruserdata
+renv/library/
+renv/staging/
+renv/cache/
+renv/local/
+renv/lock/
+renv/python/
+renv/sandbox/
